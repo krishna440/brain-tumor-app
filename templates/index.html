@@ -1,0 +1,164 @@
+{% extends "import.html" %} 
+{% block content %}
+
+<div class="flex flex-col items-center">
+    <div class="w-full max-w-2xl bg-gray-800 rounded-lg shadow-2xl p-8">
+        
+        <h2 class="text-3xl font-bold text-center text-white mb-6">Upload MRI for Analysis</h2>
+
+        <!-- File Upload Form -->
+        <form id="upload-file" method="post" enctype="multipart/form-data" class="text-center">
+            <label for="imageUpload" class="w-full cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-300 inline-block">
+                Choose Image
+            </label>
+            <input type="file" name="file" class="hidden" id="imageUpload" accept=".png, .jpg, .jpeg">
+        </form>
+
+        <!-- Image Preview -->
+        <div class="image-section mt-6 text-center" style="display:none;">
+            <img id="imagePreview" class="img-responsive rounded-lg shadow-md mx-auto" 
+                 src="#" style="width:300px; height:300px; object-fit: cover;"/><br>
+
+            <!-- Patient Name Input -->
+            <div class="mt-4">
+                <input 
+                    type="text" 
+                    id="patientName" 
+                    placeholder="Enter Patient Name" 
+                    class="w-full px-4 py-3 rounded-lg bg-gray-900 text-white border border-gray-700 
+                           focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+            </div>
+
+            <!-- Predict Button -->
+            <div class="mt-4">
+                <button type="button" 
+                        class="btn-predict w-full bg-green-600 hover:bg-green-700 text-white 
+                               font-bold py-3 px-4 rounded-lg transition-colors duration-300 shadow-lg" 
+                        id="btn-predict">
+                    Predict
+                </button>
+            </div>
+        </div>
+
+        <!-- Loader -->
+        <div class="loader-container text-center mt-6" style="display:none;">
+            <div class="loader inline-block"></div>
+            <p class="text-lg text-gray-400 mt-2">Analyzing image...</p>
+        </div>
+
+        <!-- Result -->
+        <div id="result-container" class="mt-6 text-center" style="display:none;"></div>
+
+        <!-- PDF Download Button -->
+        <div id="report-section" class="mt-4 text-center" style="display:none;">
+            <a id="download-report" 
+               class="bg-purple-700 hover:bg-purple-800 text-white font-bold py-3 px-5 rounded-lg 
+                      transition-colors duration-300 inline-block shadow-lg"
+               href="#" download>
+                Download PDF Report
+            </a>
+        </div>
+
+    </div>
+</div>
+
+<!-- JavaScript Logic -->
+<script type="text/javascript">
+    $(document).ready(function () {
+
+        // --- 1. Image Preview ---
+        $('#imageUpload').change(function () {
+            const file = this.files[0];
+            if (file) {
+                let reader = new FileReader();
+                reader.onload = function (event) {
+                    $('#imagePreview').attr('src', event.target.result);
+                };
+                reader.readAsDataURL(file);
+
+                $('.image-section').show(); 
+                $('#result-container').hide().empty();
+                $('#report-section').hide(); 
+            }
+        });
+
+        // --- 2. Predict Button ---
+        $('#btn-predict').click(function () {
+            var form_data = new FormData($('#upload-file')[0]);
+
+            // ADD PATIENT NAME HERE
+            form_data.append("patient_name", $('#patientName').val());
+
+            $(this).hide();
+            $('.loader-container').show();
+            $('#result-container').hide().empty();
+            $('#report-section').hide();
+
+            $.ajax({
+                type: 'POST',
+                url: '/predict',
+                data: form_data,
+                contentType: false,
+                cache: false,
+                processData: false,
+                
+                success: function (data) {
+                    $('.loader-container').hide();
+                    $('#btn-predict').show();
+                    $('#result-container').show();
+
+                    // --- ERROR CASE ---
+                    if (data.error) {
+                        let errorHtml = `
+                            <div class="p-4 rounded-lg bg-red-900 border border-red-700 text-red-200">
+                                <h3 class="font-bold text-xl">Warning</h3>
+                                <p class="text-lg">${data.error}</p>
+                            </div>
+                        `;
+                        $('#result-container').html(errorHtml);
+                        $('#report-section').hide();
+                    } 
+
+                    // --- SUCCESS CASE ---
+                    else if (data.prediction) {
+                        let resultHtml = `
+                            <div class="p-6 rounded-lg 
+                                ${data.prediction.includes('Yes') ? 'bg-red-800' : 'bg-green-800'} 
+                                text-white">
+                                <h3 class="font-bold text-2xl mb-2">Analysis Complete</h3>
+                                <p class="text-xl mb-1">${data.prediction}</p>
+                                <p class="text-md text-gray-300">Confidence: ${data.confidence}%</p>
+                            </div>
+                        `;
+                        $('#result-container').html(resultHtml);
+
+                        // --- PDF BUTTON ---
+                        if (data.report) {
+                            $('#report-section').show();
+                            $('#download-report').attr("href", data.report);
+                        }
+                    }
+                },
+
+                error: function (xhr, status, error) {
+                    $('.loader-container').hide();
+                    $('#btn-predict').show();
+                    $('#result-container').show();
+
+                    let errorHtml = `
+                        <div class="p-4 rounded-lg bg-gray-700 text-yellow-300">
+                            <h3 class="font-bold">Error</h3>
+                            <p>Prediction failed. Server error occurred.</p>
+                            <p><small>${error}</small></p>
+                        </div>
+                    `;
+                    $('#result-container').html(errorHtml);
+                    $('#report-section').hide();
+                }
+            });
+        });
+    });
+</script>
+
+{% endblock %}
